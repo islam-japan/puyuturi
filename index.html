@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ぷゆ釣り 100 - Puyu Fishing -</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Kiwi Maru', serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    
+    .tab-content { display: none; }
+    .tab-content.active { display: flex; }
+
+    @keyframes bobbing {
+      0%, 100% { transform: translateY(0px) rotate(0deg); }
+      50% { transform: translateY(-8px) rotate(-3deg); }
+    }
+
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-70px) scale(1.4); }
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translate(0, 0); }
+      20% { transform: translate(-5px, 3px); }
+      40% { transform: translate(5px, -3px); }
+      60% { transform: translate(-5px, -3px); }
+      80% { transform: translate(5px, 3px); }
+    }
+
+    .animate-bob { animation: bobbing 3s ease-in-out infinite; }
+    .animate-shake { animation: shake 0.25s ease-in-out infinite; }
+
+    .zukan-scroll::-webkit-scrollbar { width: 6px; }
+    .zukan-scroll::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.05); border-radius: 10px; }
+    .zukan-scroll::-webkit-scrollbar-thumb { background: rgba(14, 165, 233, 0.4); border-radius: 10px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-800 h-screen w-screen overflow-hidden flex flex-col items-center justify-center p-2 sm:p-4">
+
+  <!-- Main Game Container -->
+  <div class="relative w-full max-w-md h-[96vh] max-h-[880px] bg-sky-100 rounded-3xl shadow-2xl overflow-hidden flex flex-col border-4 border-white/80">
+    
+    <!-- Top Header -->
+    <header class="bg-white/90 backdrop-blur-md px-4 py-2 border-b border-sky-100 flex justify-between items-center z-10 shadow-sm">
+      <div class="flex items-center gap-1.5">
+        <span class="text-2xl animate-bounce">🥺</span>
+        <h1 class="font-extrabold text-sky-800 text-base sm:text-lg tracking-wide">ぷゆ釣り 100</h1>
+      </div>
+      <div class="flex items-center gap-1.5 text-xs font-semibold">
+        <span id="current-location-badge" class="bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full border border-emerald-300 shadow-sm">
+          🌱 川
+        </span>
+        <span id="zukan-progress-badge" class="bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full border border-amber-300 shadow-sm font-bold">
+          0/100 (0%)
+        </span>
+      </div>
+    </header>
+
+    <!-- Content Area -->
+    <main class="flex-1 relative overflow-hidden flex flex-col">
+      
+      <!-- ================= 1. FISHING FIELD TAB ================= -->
+      <section id="tab-game" class="tab-content active flex-1 relative flex-col justify-between overflow-hidden">
+        
+        <!-- Canvas for Background & Animations -->
+        <canvas id="gameCanvas" class="absolute inset-0 w-full h-full"></canvas>
+
+        <!-- Dynamic Game UI Overlay -->
+        <div id="game-overlay" class="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 z-10">
+          
+          <!-- Status Message Banner -->
+          <div class="w-full flex justify-center mt-1">
+            <div id="status-message" class="bg-white/95 backdrop-blur-sm text-slate-800 px-5 py-2.5 rounded-full font-bold shadow-xl text-xs sm:text-sm transition-all border-2 border-sky-300 animate-bounce">
+              「キャスト」を押して釣りをはじめよう！🥺
+            </div>
+          </div>
+
+          <!-- Tension Bar Mini-Game UI -->
+          <div id="tension-container" class="hidden w-full max-w-xs mx-auto bg-slate-900/80 backdrop-blur-md p-3.5 rounded-2xl border-2 border-white/60 text-white flex-col gap-2 items-center shadow-2xl">
+            <div class="flex justify-between w-full text-xs font-extrabold px-1">
+              <span id="target-fish-label" class="text-amber-300">魚が引き寄せ中...</span>
+              <span id="tension-percent" class="text-emerald-400">0%</span>
+            </div>
+            <!-- Meter Bar -->
+            <div class="w-full h-6 bg-slate-800 rounded-full overflow-hidden p-1 border border-white/30 relative">
+              <div id="tension-bar" class="h-full bg-gradient-to-r from-emerald-400 via-amber-400 to-rose-500 rounded-full transition-all duration-75 w-0"></div>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <span class="text-[11px] font-black tracking-wider text-white drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] animate-pulse">連打して釣り上げろ！</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action Control Buttons -->
+          <div class="w-full flex justify-center pb-3 pointer-events-auto">
+            <button id="btn-action" class="w-48 h-16 bg-gradient-to-b from-amber-400 via-orange-500 to-amber-600 hover:brightness-110 active:scale-95 text-white font-black text-xl rounded-full shadow-2xl border-4 border-white flex items-center justify-center gap-2 transition-all">
+              <span class="text-2xl">🎣</span>
+              <span id="btn-action-text">キャスト！</span>
+            </button>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================= 2. ENCYCLOPEDIA (ZUKAN) TAB ================= -->
+      <section id="tab-zukan" class="tab-content flex-1 p-3 flex-col bg-slate-50/95 overflow-hidden">
+        
+        <!-- Header & Stats -->
+        <div class="flex justify-between items-center mb-2 px-1">
+          <h2 class="text-sm font-extrabold text-slate-700 flex items-center gap-1">
+            <span>📖</span> 100種おさかな図鑑
+          </h2>
+          <span id="zukan-count" class="text-xs bg-sky-500 text-white font-extrabold px-3 py-1 rounded-full shadow-sm">
+            コンプリート率: 0%
+          </span>
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="flex flex-wrap gap-1 mb-2">
+          <button data-filter="all" class="zukan-filter active text-[11px] font-bold px-2.5 py-1 rounded-lg bg-sky-500 text-white">すべて</button>
+          <button data-filter="川" class="zukan-filter text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-slate-600 border border-slate-200">🌱 川</button>
+          <button data-filter="海" class="zukan-filter text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-slate-600 border border-slate-200">🌊 海</button>
+          <button data-filter="深海" class="zukan-filter text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-slate-600 border border-slate-200">🌌 深海</button>
+          <button data-filter="幻" class="zukan-filter text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-slate-600 border border-slate-200">✨ 幻/秘境</button>
+        </div>
+
+        <!-- Grid Cards Container -->
+        <div id="zukan-grid" class="zukan-scroll flex-1 overflow-y-auto grid grid-cols-3 gap-2 pr-1 pb-4">
+          <!-- Dynamically Populated Cards -->
+        </div>
+      </section>
+
+      <!-- ================= 3. LOCATION & TIME SELECT TAB ================= -->
+      <section id="tab-location" class="tab-content flex-1 p-3.5 flex-col bg-sky-50/80 overflow-y-auto gap-3.5">
+        
+        <div class="flex justify-between items-center">
+          <h2 class="text-sm font-extrabold text-slate-700 flex items-center gap-1.5">
+            <span>🗺️</span> 釣り場と時間帯を選ぶ
+          </h2>
+        </div>
+
+        <!-- Time Selector -->
+        <div class="bg-white rounded-2xl p-3 shadow-sm border border-slate-200/80">
+          <p class="text-xs font-bold text-slate-600 mb-2">⏱️ 時間帯を選択</p>
+          <div class="flex gap-2">
+            <button data-time="昼" class="time-btn flex-1 py-1.5 text-xs font-bold rounded-xl bg-amber-400 text-white shadow-sm border-2 border-amber-300">☀️ 昼</button>
+            <button data-time="夕" class="time-btn flex-1 py-1.5 text-xs font-bold rounded-xl bg-slate-100 text-slate-600 border border-slate-200">🌅 夕方</button>
+            <button data-time="夜" class="time-btn flex-1 py-1.5 text-xs font-bold rounded-xl bg-slate-100 text-slate-600 border border-slate-200">🌙 夜</button>
+          </div>
+        </div>
+
+        <!-- Location Cards Grid -->
+        <div class="grid grid-cols-1 gap-2.5">
+          <!-- River -->
+          <div class="location-card group cursor-pointer bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl p-3.5 text-white shadow-sm hover:shadow-md transition-all relative overflow-hidden border-2 border-white" data-loc="川">
+            <div class="flex items-center gap-3">
+              <span class="text-3xl">🌱</span>
+              <div>
+                <h3 class="font-extrabold text-base">清流（川）</h3>
+                <p class="text-[11px] opacity-90">淡水魚・渓流魚たちの憩いの場。25種類</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Ocean -->
+          <div class="location-card group cursor-pointer bg-gradient-to-r from-sky-500 to-blue-700 rounded-2xl p-3.5 text-white shadow-sm hover:shadow-md transition-all relative overflow-hidden border-2 border-white" data-loc="海">
+            <div class="flex items-center gap-3">
+              <span class="text-3xl">🌊</span>
+              <div>
+                <h3 class="font-extrabold text-base">大海原（海）</h3>
+                <p class="text-[11px] opacity-90">大物・回遊魚が回遊する広い海。25種類</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Deep Sea -->
+          <div class="location-card group cursor-pointer bg-gradient-to-r from-indigo-900 to-purple-950 rounded-2xl p-3.5 text-white shadow-sm hover:shadow-md transition-all relative overflow-hidden border-2 border-white" data-loc="深海">
+            <div class="flex items-center gap-3">
+              <span class="text-3xl">🌌</span>
+              <div>
+                <h3 class="font-extrabold text-base">神秘の深海</h3>
+                <p class="text-[11px] opacity-90">光の届かない闇に潜む不思議な生き物。25種類</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Phantom / Space -->
+          <div class="location-card group cursor-pointer bg-gradient-to-r from-fuchsia-600 via-pink-600 to-amber-500 rounded-2xl p-3.5 text-white shadow-md hover:shadow-lg transition-all relative overflow-hidden border-2 border-white" data-loc="幻">
+            <div class="flex items-center gap-3">
+              <span class="text-3xl">✨</span>
+              <div>
+                <h3 class="font-extrabold text-base">秘境コスモ海・古代沼</h3>
+                <p class="text-[11px] opacity-95">超レジェンド級の幻の魚が集う聖地！25種類</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bg-white border-t border-slate-200/80 flex justify-around p-2 z-20">
+      <button data-tab="tab-game" class="nav-btn active flex flex-col items-center gap-0.5 text-sky-500 font-extrabold text-xs py-1 px-4 rounded-xl transition-all">
+        <span class="text-xl">🎣</span>
+        <span>つり</span>
+      </button>
+      <button data-tab="tab-zukan" class="nav-btn flex flex-col items-center gap-0.5 text-slate-400 font-extrabold text-xs py-1 px-4 rounded-xl transition-all">
+        <span class="text-xl">📖</span>
+        <span>ずかん</span>
+      </button>
+      <button data-tab="tab-location" class="nav-btn flex flex-col items-center gap-0.5 text-slate-400 font-extrabold text-xs py-1 px-4 rounded-xl transition-all">
+        <span class="text-xl">🗺️</span>
+        <span>ばしょ</span>
+      </button>
+    </nav>
+
+    <!-- Catch Result Modal -->
+    <div id="catch-modal" class="hidden absolute inset-0 bg-slate-950/70 backdrop-blur-sm z-30 flex items-center justify-center p-4">
+      <div class="bg-white w-full max-w-xs rounded-3xl p-5 text-center shadow-2xl border-4 border-amber-300 animate-shake flex flex-col items-center relative overflow-hidden">
+        
+        <span id="modal-new-tag" class="hidden bg-rose-500 text-white font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-wider mb-1 animate-bounce shadow-md">
+          ✨ NEW DISCOVERY! ✨
+        </span>
+
+        <div id="modal-fish-icon" class="text-6xl my-2 transform hover:scale-125 transition-transform duration-300">🐟</div>
+
+        <h3 id="modal-fish-name" class="font-black text-xl text-slate-800">おさかな名</h3>
+        <p id="modal-fish-rarity" class="text-xs font-bold text-amber-500 mb-1">★★★★☆</p>
+        <p id="modal-fish-size" class="text-xs font-extrabold text-slate-600 mb-2">サイズ: 25.4 cm</p>
+
+        <p id="modal-fish-desc" class="text-xs text-slate-600 bg-slate-100/80 p-3 rounded-2xl border border-slate-200 mb-4 leading-relaxed w-full">
+          説明文
+        </p>
+
+        <button id="btn-close-modal" class="w-full py-3 bg-gradient-to-r from-sky-400 via-blue-500 to-sky-600 text-white font-extrabold text-sm rounded-xl shadow-lg active:scale-95 transition-all border border-white">
+          やったね！🥺
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. COMPLETE 100 FISH DATABASE
+    // ==========================================
+    const FISH_DATABASE = [
+      // --- 🌱 川 (River) : 25種類 ---
+      { id: 'r01', name: 'メダカ', icon: '🐟', location: '川', rarity: 1, minSize: 2, maxSize: 4, desc: '小さな川や田んぼですいすい泳ぐ親しみやすいおさかな。' },
+      { id: 'r02', name: 'フナ', icon: '🐟', location: '川', rarity: 1, minSize: 10, maxSize: 25, desc: '釣りの基本！「釣りはフナに始まりフナに終わる」という名言も。' },
+      { id: 'r03', name: 'オイカワ', icon: '🐟', location: '川', rarity: 1, minSize: 8, maxSize: 15, desc: 'オスは美しいエメラルドグリーンの体色になる綺麗な魚。' },
+      { id: 'r04', name: 'タナゴ', icon: '🐠', location: '川', rarity: 1, minSize: 4, maxSize: 8, desc: '虹色の光沢を持つ小さな宝石のような淡水魚。' },
+      { id: 'r05', name: 'ドジョウ', icon: '🐟', location: '川', rarity: 1, minSize: 8, maxSize: 18, desc: '川の底をにょろにょろ動くユーモラスな仲間。' },
+      { id: 'r06', name: 'アユ', icon: '🐟', location: '川', rarity: 2, minSize: 12, maxSize: 28, desc: '清流の香子。スイカのような良い香りがする綺麗な魚。' },
+      { id: 'r07', name: 'ヤマメ', icon: '🐟', location: '川', rarity: 2, minSize: 15, maxSize: 35, desc: '「渓流の女王」と呼ばれる美しいパーマークを持つ魚。' },
+      { id: 'r08', name: 'アマゴ', icon: '🐠', location: '川', rarity: 2, minSize: 15, maxSize: 35, desc: 'ヤマメに似ているが朱色の綺麗な斑点があるのが特徴。' },
+      { id: 'r09', name: 'イワナ', icon: '🐟', location: '川', rarity: 2, minSize: 20, maxSize: 45, desc: '澄んだ冷たい源流近くにすむ幻の渓流魚。' },
+      { id: 'r10', name: 'ニジマス', icon: '🐠', location: '川', rarity: 2, minSize: 20, maxSize: 60, desc: '体に虹色の鮮やかな筋が入った元気いっぱいのトラウト。' },
+      { id: 'r11', name: 'ブラックバス', icon: '🐟', location: '川', rarity: 2, minSize: 20, maxSize: 55, desc: 'ルアー釣りの大人気ターゲット！パワフルに跳ねる。' },
+      { id: 'r12', name: 'ブルーギル', icon: '🐠', location: '川', rarity: 1, minSize: 10, maxSize: 22, desc: '青いエラブタが特徴的。好奇心旺盛ですぐ食いつく。' },
+      { id: 'r13', name: 'コイ', icon: '🐟', location: '川', rarity: 2, minSize: 40, maxSize: 90, desc: '川のあちこちで見かける立派で大きな魚。長生きする。' },
+      { id: 'r14', name: '錦鯉', icon: '✨', location: '川', rarity: 3, minSize: 40, maxSize: 85, desc: '泳ぐ宝石！色鮮やかな赤と白のコントラストがとても優雅。' },
+      { id: 'r15', name: 'ナマズ', icon: '🐡', location: '川', rarity: 2, minSize: 30, maxSize: 70, desc: '立派なヒゲを持つ夜行性の川のハンター。' },
+      { id: 'r16', name: 'ライギョ', icon: '🐊', location: '川', rarity: 3, minSize: 50, maxSize: 95, desc: '蛇のような模様と強靭な顎を持つ水草ゾーンのぬし。' },
+      { id: 'r17', name: 'ウナギ', icon: '🐍', location: '川', rarity: 3, minSize: 40, maxSize: 90, desc: 'ぬるぬるすべるスタミナ抜群の高級魚！' },
+      { id: 'r18', name: 'スッポン', icon: '🐢', location: '川', rarity: 3, minSize: 20, maxSize: 40, desc: 'カメの仲間だが噛みついたら離さない強い力を持つ。' },
+      { id: 'r19', name: 'サクラマス', icon: '🌸', location: '川', rarity: 4, minSize: 40, maxSize: 70, desc: '桜の花が咲く頃に川へ戻ってくるロマン溢れる大型鱒。' },
+      { id: 'r20', name: 'イトウ', icon: '🐟', location: '川', rarity: 4, minSize: 60, maxSize: 130, desc: '日本最大の淡水魚！幻の怪魚として語り継がれる。' },
+      { id: 'r21', name: 'オオナマズ', icon: '🐡', location: '川', rarity: 4, minSize: 70, maxSize: 150, desc: '川の底深くに潜む超巨大なナマズの長老。' },
+      { id: 'r22', name: '黄金イワナ', icon: '✨', location: '川', rarity: 4, minSize: 30, maxSize: 60, desc: '全身が金色に輝く奇跡のイワナ。見ると幸せになれる？' },
+      { id: 'r23', name: 'アルビノコイ', icon: '⚪', location: '川', rarity: 4, minSize: 40, maxSize: 80, desc: '真っ白な体に赤い瞳を持つ非常に珍しいコイ。' },
+      { id: 'r24', name: 'カッパ', icon: '🥒', location: '川', rarity: 5, minSize: 100, maxSize: 140, desc: 'きゅうりが大好きな妖怪！釣られてびっくりしている。' },
+      { id: 'r25', name: '清流の守護神ぷゆ', icon: '🥺', location: '川', rarity: 5, minSize: 150, maxSize: 250, desc: '川の平和を守る聖なる守護神ぷゆゆ。水がとてもきれい。' },
+
+      // --- 🌊 海 (Ocean) : 25種類 ---
+      { id: 'o01', name: 'アジ', icon: '🐟', location: '海', rarity: 1, minSize: 15, maxSize: 30, desc: 'サビキ釣りで大人気！アジフライにすると最高においしい。' },
+      { id: 'o02', name: 'サバ', icon: '🐟', location: '海', rarity: 1, minSize: 20, maxSize: 40, desc: '背中の模様がかっこいい。群れで元気に泳ぎ回る。' },
+      { id: 'o03', name: 'キス', icon: '🐟', location: '海', rarity: 1, minSize: 12, maxSize: 25, desc: '「砂浜の貴婦人」と呼ばれる細身で美しい透明感ある魚。' },
+      { id: 'o04', name: 'イワシ', icon: '🐟', location: '海', rarity: 1, minSize: 10, maxSize: 20, desc: '大きな群れをつくって泳ぐ海の恵みの代表格。' },
+      { id: 'o05', name: 'ハゼ', icon: '🐟', location: '海', rarity: 1, minSize: 8, maxSize: 18, desc: '浅瀬の砂底でひょこひょこ動く可愛らしい魚。' },
+      { id: 'o06', name: 'メバル', icon: '👁️', location: '海', rarity: 2, minSize: 15, maxSize: 30, desc: 'くりくりとした大きな目が特徴のロックフィッシュ。' },
+      { id: 'o07', name: 'カサゴ', icon: '🐡', location: '海', rarity: 2, minSize: 15, maxSize: 32, desc: '岩場に隠れるゴツゴツした魚。唐揚げがとても絶品。' },
+      { id: 'o08', name: 'ヒラメ', icon: '🐟', location: '海', rarity: 2, minSize: 30, maxSize: 80, desc: '砂底に化ける名手。「左ヒラメに右カレイ」。' },
+      { id: 'o09', name: 'カレイ', icon: '🐟', location: '海', rarity: 2, minSize: 20, maxSize: 45, desc: 'おっとり砂底に潜む魚。煮付けにすると美味しい。' },
+      { id: 'o10', name: 'スズキ (シーバス)', icon: '🐟', location: '海', rarity: 2, minSize: 40, maxSize: 90, desc: '出世魚の代表！夜の海でエラ洗いを連発するファイター。' },
+      { id: 'o11', name: 'マダイ', icon: '🐠', location: '海', rarity: 3, minSize: 30, maxSize: 85, desc: 'めでタイ！色鮮やかなピンク色と青いポッチが綺麗。' },
+      { id: 'o12', name: 'ブリ', icon: '🐟', location: '海', rarity: 3, minSize: 50, maxSize: 100, desc: '強烈な引きを見せる大物青物！脂がのって美味しい。' },
+      { id: 'o13', name: 'カンパチ', icon: '🐟', location: '海', rarity: 3, minSize: 50, maxSize: 120, desc: '額に「八」の字模様がある引きが強烈な青物。' },
+      { id: 'o14', name: 'タチウオ', icon: '⚔️', location: '海', rarity: 3, minSize: 70, maxSize: 140, desc: '立ち泳ぎをする銀色に輝く刀のようなクールな魚。' },
+      { id: 'o15', name: 'アオリイカ', icon: '🦑', location: '海', rarity: 3, minSize: 15, maxSize: 45, desc: 'イカの王様！エギングで大人気の透明なイカ。' },
+      { id: 'o16', name: 'カワハギ', icon: '🐡', location: '海', rarity: 2, minSize: 15, maxSize: 30, desc: 'エサを取るのが非常に上手な「エサ取り名人」。' },
+      { id: 'o17', name: 'トビウオ', icon: '🕊️', location: '海', rarity: 3, minSize: 20, maxSize: 40, desc: '胸ビレを大きく広げて海面を数百メートル滑空する！' },
+      { id: 'o18', name: 'シイラ', icon: '🐬', location: '海', rarity: 3, minSize: 60, maxSize: 150, desc: 'ハワイではマヒマヒと呼ばれる鮮やかなジャンプを魅せる魚。' },
+      { id: 'o19', name: 'クロマグロ', icon: '🐟', location: '海', rarity: 4, minSize: 100, maxSize: 280, desc: '「黒いダイヤ」と呼ばれる大海原を爆走する超大型魚！' },
+      { id: 'o20', name: 'カジキマグロ', icon: '🗡️', location: '海', rarity: 4, minSize: 150, maxSize: 350, desc: '鋭い角を持つカジキ。アングラー憧れの最高峰ターゲット。' },
+      { id: 'o21', name: 'タツノオトシゴ', icon: '🐉', location: '海', rarity: 3, minSize: 6, maxSize: 16, desc: '竜のような不思議な姿。しっぽを海藻に巻きつけて休む。' },
+      { id: 'o22', name: 'マンボウ', icon: '🌊', location: '海', rarity: 4, minSize: 100, maxSize: 250, desc: 'のんびり海面を漂う大きな魚。おっとり癒やし系。' },
+      { id: 'o23', name: 'ホホジロザメ', icon: '🦈', location: '海', rarity: 4, minSize: 250, maxSize: 500, desc: '海の最強ハンター！鋭い歯と圧倒的な威圧感。' },
+      { id: 'o24', name: 'メガロドン', icon: '🦈', location: '海', rarity: 5, minSize: 800, maxSize: 1800, desc: '太古の海から時を超えてやってきた超巨大サメ！' },
+      { id: 'o25', name: 'ポセイドンぷゆ', icon: '🔱', location: '海', rarity: 5, minSize: 300, maxSize: 600, desc: '三叉の槍を持つ海の支配者ぷゆゆ。荒波を鎮める。' },
+
+      // --- 🌌 深海 (Deep Sea) : 25種類 ---
+      { id: 'd01', name: 'メンダコ', icon: '🐙', location: '深海', rarity: 1, minSize: 10, maxSize: 22, desc: 'パタパタ動く耳のようなヒレが最高にキュートな深海のアイドル。' },
+      { id: 'd02', name: 'オオグソクムシ', icon: '🐛', location: '深海', rarity: 1, minSize: 15, maxSize: 30, desc: '深海の掃除屋！かっこいい甲殻とダンゴムシのような姿。' },
+      { id: 'd03', name: 'クリオネ', icon: '🐚', location: '深海', rarity: 2, minSize: 1, maxSize: 4, desc: '流氷の天使！可愛い見た目だが捕食時は頭が開く…！' },
+      { id: 'd04', name: 'チョウチンアンコウ', icon: '🐡', location: '深海', rarity: 2, minSize: 30, maxSize: 65, desc: '頭のチョウチンをピカピカ光らせて獲物を誘き寄せる。' },
+      { id: 'd05', name: 'デメニギス', icon: '👀', location: '深海', rarity: 3, minSize: 10, maxSize: 25, desc: '頭が透明なドームになっており、緑色の目が上を向いている。' },
+      { id: 'd06', name: 'リュウグウノツカイ', icon: '🐉', location: '深海', rarity: 3, minSize: 200, maxSize: 650, desc: '赤い立ちヒレと長い銀色の体がなんとも神秘的な深海魚。' },
+      { id: 'd07', name: 'ミツクリザメ', icon: '🦈', location: '深海', rarity: 3, minSize: 150, maxSize: 380, desc: '「ゴブリンシャーク」と呼ばれる突起した長い鼻を持つサメ。' },
+      { id: 'd08', name: 'シーラカンス', icon: '🐟', location: '深海', rarity: 4, minSize: 100, maxSize: 180, desc: '数億年前から姿を変えていない「生きた化石」。' },
+      { id: 'd09', name: 'ダイオウイカ', icon: '🦑', location: '深海', rarity: 4, minSize: 300, maxSize: 900, desc: '深海の超巨大イカ！マッコウクジラと激闘を繰り広げる。' },
+      { id: 'd10', name: 'フクロウナギ', icon: '🐍', location: '深海', rarity: 3, minSize: 50, maxSize: 100, desc: '自分より大きな獲物も飲み込めるアコーディオンのような巨大な口。' },
+      { id: 'd11', name: 'ペリカンアンコウ', icon: '🐡', location: '深海', rarity: 3, minSize: 30, maxSize: 60, desc: 'ペリカンのように喉の袋が大きく広がる珍魚。' },
+      { id: 'd12', name: 'ブロブフィッシュ', icon: '🫠', location: '深海', rarity: 2, minSize: 20, maxSize: 40, desc: '水圧がない地上に上がるとおじさんのような顔になる魚。' },
+      { id: 'd13', name: 'ラブカ', icon: '🐍', location: '深海', rarity: 3, minSize: 120, maxSize: 200, desc: '古代サメの生き残り。鰓（えら）のフリルが特徴的。' },
+      { id: 'd14', name: 'ピンポンツリースポンジ', icon: '🏓', location: '深海', rarity: 2, minSize: 15, maxSize: 35, desc: 'ピンポン玉が樹木のように生えた奇妙な肉食カイメン。' },
+      { id: 'd15', name: 'ホウライエソ', icon: '🗡️', location: '深海', rarity: 3, minSize: 25, maxSize: 45, desc: '口に収まらないほどの鋭い牙がズラリと並ぶ肉食魚。' },
+      { id: 'd16', name: 'オウムガイ', icon: '🐚', location: '深海', rarity: 3, minSize: 15, maxSize: 25, desc: '幾何学的な綺麗な殻を持つ古代からの生き残り。' },
+      { id: 'd17', name: 'タコブネ', icon: '🐙', location: '深海', rarity: 3, minSize: 10, maxSize: 20, desc: 'メスが自分で美しく薄い貝殻をつくってプカプカ浮くタコ。' },
+      { id: 'd18', name: 'ウミグモ', icon: '🕷️', location: '深海', rarity: 2, minSize: 10, maxSize: 30, desc: '足がとても長い深海のクモのような節足動物。' },
+      { id: 'd19', name: 'ユメナマコ', icon: '✨', location: '深海', rarity: 3, minSize: 12, maxSize: 25, desc: 'ドレスをまとったように優雅に深海を舞う透明なナマコ。' },
+      { id: 'd20', name: 'ダイオウグソクムシ', icon: '🐛', location: '深海', rarity: 3, minSize: 25, maxSize: 50, desc: '深海グソクムシの王様！何年もご飯を食べなくても平気。' },
+      { id: 'd21', name: 'センジュナマコ', icon: '🐷', location: '深海', rarity: 2, minSize: 8, maxSize: 15, desc: 'ピンク色でブタのような足が生えている不思議なナマコ。' },
+      { id: 'd22', name: 'クラゲダコ', icon: 'クラゲ', icon:'🪼', location: '深海', rarity: 3, minSize: 15, maxSize: 30, desc: '全身がクラゲのように透明で綺麗なタコ。' },
+      { id: 'd23', name: 'コウモリタコ', icon: '🦇', location: '深海', rarity: 4, minSize: 20, maxSize: 35, desc: 'マントのような膜を広げて青く発光するマントタコ。' },
+      { id: 'd24', name: 'アビスキング', icon: '👑', location: '深海', rarity: 5, minSize: 400, maxSize: 800, desc: '最深部に君臨する漆黒とネオンに輝く深海の覇王。' },
+      { id: 'd25', name: 'アビスぷゆゆ', icon: '🥺', location: '深海', rarity: 5, minSize: 333, maxSize: 777, desc: '暗闇の中で怪しく輝く神秘の深海ぷゆゆ。' },
+
+      // --- ✨ 秘境・コスモ海・古代沼 (Phantom/Space) : 25種類 ---
+      { id: 'p01', name: 'コスモメダカ', icon: '💫', location: '幻', rarity: 2, minSize: 5, maxSize: 10, desc: '体に星くずをまとって宇宙を泳ぐような綺麗なおさかな。' },
+      { id: 'p02', name: 'ムーンフィッシュ', icon: '🌙', location: '幻', rarity: 2, minSize: 40, maxSize: 90, desc: '三日月のような優雅なフォルムで夜空を輝かせる。' },
+      { id: 'p03', name: 'スターダストエイ', icon: '⭐', location: '幻', rarity: 3, minSize: 80, maxSize: 180, desc: '背中に流星群が描かれた銀河を羽ばたくエイ。' },
+      { id: 'p04', name: 'サンバーストタイ', icon: '☀️', location: '幻', rarity: 3, minSize: 40, maxSize: 85, desc: '太陽のフレアのように熱く燃え上がる熱帯魚。' },
+      { id: 'p05', name: 'オーロラベタ', icon: '🌈', location: '幻', rarity: 3, minSize: 10, maxSize: 20, desc: '北極のオーロラがそのまま魚になった幻想的なビジュアル。' },
+      { id: 'p06', name: 'クリスタルアナゴ', icon: '💎', location: '幻', rarity: 3, minSize: 30, maxSize: 60, desc: '水晶で作られたかのように透明で硬い綺麗なお魚。' },
+      { id: 'p07', name: 'フェニックスクラブ', icon: '🦀', location: '幻', rarity: 3, minSize: 20, maxSize: 40, desc: '何度茹でても復活する不死鳥の魂を宿したカニ。' },
+      { id: 'p08', name: 'アンモナイトクラーケン', icon: '🦑', location: '幻', rarity: 4, minSize: 200, maxSize: 500, desc: '太古の殻と無数の触手を持つ古代幻獣。' },
+      { id: 'p09', name: 'ダンクルオステウス', icon: '🐊', location: '幻', rarity: 4, minSize: 300, maxSize: 700, desc: '強固な装甲で全身を覆われた最強の古生代甲冑魚！' },
+      { id: 'p10', name: 'アノマロカリス', icon: '🦐', location: '幻', rarity: 4, minSize: 40, maxSize: 100, desc: 'カンブリア紀のカンブリア最強の覇者！触手がクール。' },
+      { id: 'p11', name: 'ウパルパ・コスモ', icon: '🌸', location: '幻', rarity: 3, minSize: 15, maxSize: 30, desc: 'ウーパールーパーが宇宙適応したふわふわ漂う生き物。' },
+      { id: 'p12', name: 'ネオンツリークラゲ', icon: '🪼', location: '幻', rarity: 3, minSize: 50, maxSize: 120, desc: '電飾ツリーのようにカラフルに光を点滅させるクラゲ。' },
+      { id: 'p13', name: 'タイムトラウト', icon: '⏳', location: '幻', rarity: 4, minSize: 30, maxSize: 70, desc: '時間を超えて過去と未来を行き来する時空のトラウト。' },
+      { id: 'p14', name: 'ルナサーモン', icon: '🌕', location: '幻', rarity: 4, minSize: 50, maxSize: 110, desc: '満月の夜にしか現れない神秘的な銀色の鮭。' },
+      { id: 'p15', name: 'ブラックホールタコ', icon: '🕳️', location: '幻', rarity: 4, minSize: 100, maxSize: 300, desc: 'あらゆる物質を引き寄せる重力フィールドを持つタコ。' },
+      { id: 'p16', name: 'プラズマシャーク', icon: '⚡', location: '幻', rarity: 4, minSize: 200, maxSize: 450, desc: '電撃をまとって高速移動する危険な超エネルギーサメ。' },
+      { id: 'p17', name: 'コメットゴールドフィッシュ', icon: '☄️', location: '幻', rarity: 3, minSize: 15, maxSize: 35, desc: '彗星のような長い尾ひれを引き引いて泳ぐ金魚。' },
+      { id: 'p18', name: 'レインボードラゴン', icon: '🐲', location: '幻', rarity: 5, minSize: 400, maxSize: 900, desc: '七色の光を放つ伝説の水龍。降臨すると願いが叶う。' },
+      { id: 'p19', name: 'ギャラクシーシードラゴン', icon: '🌌', location: '幻', rarity: 5, minSize: 300, maxSize: 700, desc: '銀河系の星々をその体内に宿した究極のタツノオトシゴ。' },
+      { id: 'p20', name: 'クロノスリヴァイアサン', icon: '海獣', icon:'🐋', location: '幻', rarity: 5, minSize: 1000, maxSize: 3000, desc: '海を創世したと言われる神話級の巨大海獣。' },
+      { id: 'p21', name: 'ルビーガー', icon: '🔻', location: '幻', rarity: 4, minSize: 60, maxSize: 140, desc: '全身がルビー原石で出来ている激レアな古代魚。' },
+      { id: 'p22', name: 'サファイアシイラ', icon: '🔹', location: '幻', rarity: 4, minSize: 70, maxSize: 160, desc: '青く澄み渡るサファイアの輝きを持つシイラ。' },
+      { id: 'p23', name: 'エメラルドウナギ', icon: '🟩', location: '幻', rarity: 4, minSize: 80, maxSize: 170, desc: 'エメラルドの光を放つ神秘的な長物。' },
+      { id: 'p24', name: 'ぷゆ大明神', icon: '⛩️', location: '幻', rarity: 5, minSize: 777, maxSize: 777, desc: 'すべての魚たちの頂点に立つ神様ぷゆゆ！大吉間違いなし！' },
+      { id: 'p25', name: '宇宙創世ぷゆゆ', icon: '🥺', location: '幻', rarity: 5, minSize: 999, maxSize: 999, desc: '宇宙と命を育んだ伝説のぷゆゆ。図鑑コンプリートの象徴！' }
+    ];
+
+    // ==========================================
+    // 2. GAME STATE & SAVE SYSTEM
+    // ==========================================
+    let state = {
+      location: '川', // 川, 海, 深海, 幻
+      timeOfDay: '昼', // 昼, 夕, 夜
+      status: 'idle', // idle, casting, hit, reeling
+      caughtData: {}, // { fishId: { count: number, maxSize: number } }
+      currentFish: null,
+      reelProgress: 0
+    };
+
+    function loadSaveData() {
+      const saved = localStorage.getItem('puyu_fishing_100_save');
+      if (saved) {
+        try { state.caughtData = JSON.parse(saved); } catch (e) {}
+      }
+    }
+
+    function saveData() {
+      localStorage.setItem('puyu_fishing_100_save', JSON.stringify(state.caughtData));
+      updateZukanBadge();
+    }
+
+    // ==========================================
+    // 3. SOUND SYNTHESIZER (Web Audio API)
+    // ==========================================
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) audioCtx = new AudioCtx();
+    }
+
+    function playSound(type) {
+      if (!audioCtx) return;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      const now = audioCtx.currentTime;
+
+      if (type === 'cast') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(450, now);
+        osc.frequency.exponentialRampToValueAtTime(120, now + 0.25);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.25);
+        osc.start(now); osc.stop(now + 0.25);
+      } else if (type === 'hit') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(523, now);
+        osc.frequency.setValueAtTime(880, now + 0.1);
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now); osc.stop(now + 0.3);
+      } else if (type === 'reel') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(250 + Math.random() * 120, now);
+        gain.gain.setValueAtTime(0.08, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.08);
+        osc.start(now); osc.stop(now + 0.08);
+      } else if (type === 'success') {
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, idx) => {
+          const o = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          o.connect(g); g.connect(audioCtx.destination);
+          o.type = 'sine';
+          o.frequency.setValueAtTime(freq, now + idx * 0.1);
+          g.gain.setValueAtTime(0.2, now + idx * 0.1);
+          g.gain.linearRampToValueAtTime(0, now + idx * 0.1 + 0.3);
+          o.start(now + idx * 0.1); o.stop(now + idx * 0.1 + 0.3);
+        });
+      }
+    }
+
+    // ==========================================
+    // 4. CANVAS ANIMATION ENGINE
+    // ==========================================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let waveOffset = 0;
+    let floatOffset = 0;
+    let particles = [];
+
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function addParticles(x, y, color, count = 4) {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x, y,
+          vx: (Math.random() - 0.5) * 5,
+          vy: (Math.random() - 0.5) * 5 - 2,
+          radius: Math.random() * 4 + 2,
+          color, alpha: 1, life: 0.04
+        });
+      }
+    }
+
+    function renderCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      waveOffset += 0.03;
+      floatOffset += 0.04;
+      const w = canvas.width;
+      const h = canvas.height;
+      const waterLevel = h * 0.46;
+
+      // Render Sky & Background based on Location & Time
+      let skyTop = '#7dd3fc', skyBot = '#e0f2fe', waterTop = '#0284c7', waterBot = '#0369a1';
+
+      if (state.location === '川') {
+        if (state.timeOfDay === '夕') { skyTop = '#fdba74'; skyBot = '#fed7aa'; waterTop = '#0284c7'; waterBot = '#1e3a8a'; }
+        else if (state.timeOfDay === '夜') { skyTop = '#0f172a'; skyBot = '#1e1b4b'; waterTop = '#1e293b'; waterBot = '#0f172a'; }
+      } else if (state.location === '海') {
+        skyTop = '#38bdf8'; skyBot = '#fef08a'; waterTop = '#0284c7'; waterBot = '#0c4a6e';
+        if (state.timeOfDay === '夕') { skyTop = '#f97316'; skyBot = '#fef08a'; waterTop = '#0369a1'; waterBot = '#0f172a'; }
+        else if (state.timeOfDay === '夜') { skyTop = '#020617'; skyBot = '#1e1b4b'; waterTop = '#0f172a'; waterBot = '#020617'; }
+      } else if (state.location === '深海') {
+        skyTop = '#090d16'; skyBot = '#1e1b4b'; waterTop = '#0f172a'; waterBot = '#020617';
+      } else if (state.location === '幻') {
+        skyTop = '#4c1d95'; skyBot = '#db2777'; waterTop = '#701a75'; waterBot = '#312e81';
+      }
+
+      // Fill Sky
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, waterLevel);
+      skyGrad.addColorStop(0, skyTop); skyGrad.addColorStop(1, skyBot);
+      ctx.fillStyle = skyGrad; ctx.fillRect(0, 0, w, waterLevel);
+
+      // Celestial body (Sun/Moon/Stars)
+      if (state.timeOfDay === '夜' || state.location === '深海' || state.location === '幻') {
+        ctx.fillStyle = '#fef08a';
+        ctx.beginPath(); ctx.arc(w * 0.8, h * 0.15, 22, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath(); ctx.arc(w * 0.8, h * 0.15, 26, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Fill Water
+      const waterGrad = ctx.createLinearGradient(0, waterLevel, 0, h);
+      waterGrad.addColorStop(0, waterTop); waterGrad.addColorStop(1, waterBot);
+      ctx.fillStyle = waterGrad; ctx.fillRect(0, waterLevel, w, h - waterLevel);
+
+      // Waves
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.beginPath(); ctx.moveTo(0, waterLevel);
+      for (let x = 0; x <= w; x += 20) {
+        ctx.lineTo(x, waterLevel + Math.sin(x * 0.02 + waveOffset) * 4);
+      }
+      ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath(); ctx.fill();
+
+      // Boat & Character ぷゆゆ 🥺
+      const puyuX = w * 0.25;
+      const puyuY = waterLevel + Math.sin(floatOffset) * 4 - 8;
+
+      ctx.fillStyle = '#b45309';
+      ctx.beginPath(); ctx.ellipse(puyuX, puyuY + 28, 45, 14, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath(); ctx.ellipse(puyuX, puyuY + 25, 40, 10, 0, 0, Math.PI * 2); ctx.fill();
+
+      ctx.font = '44px serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('🥺', puyuX, puyuY);
+
+      // Fishing Rod
+      const rodEndX = puyuX + 70;
+      const rodEndY = puyuY - 45;
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(puyuX + 15, puyuY - 5); ctx.lineTo(rodEndX, rodEndY); ctx.stroke();
+
+      // Fishing Line & Float
+      if (state.status !== 'idle') {
+        let bobberX = w * 0.72;
+        let bobberY = waterLevel + 15 + Math.sin(waveOffset * 1.5) * 4;
+
+        if (state.status === 'hit' || state.status === 'reeling') {
+          bobberY += Math.sin(Date.now() * 0.04) * 6;
+        }
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(rodEndX, rodEndY);
+        ctx.quadraticCurveTo((rodEndX + bobberX) / 2, waterLevel + 20, bobberX, bobberY);
+        ctx.stroke();
+
+        // Float
+        ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(bobberX, bobberY, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(bobberX, bobberY + 3, 7, 0, Math.PI); ctx.fill();
+
+        if (state.status === 'hit' || state.status === 'reeling') {
+          ctx.font = 'bold 30px sans-serif'; ctx.fillStyle = '#facc15';
+          ctx.fillText('❗HIT!', bobberX, bobberY - 38);
+          addParticles(bobberX, bobberY, '#facc15', 1);
+        }
+      }
+
+      // Particles Loop
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx; p.y += p.vy; p.alpha -= p.life;
+        if (p.alpha <= 0) { particles.splice(i, 1); continue; }
+        ctx.fillStyle = p.color; ctx.globalAlpha = p.alpha;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1.0;
+      }
+
+      requestAnimationFrame(renderCanvas);
+    }
+
+    // ==========================================
+    // 5. GAME LOGIC & CONTROLS
+    // ==========================================
+    const statusMsg = document.getElementById('status-message');
+    const btnAction = document.getElementById('btn-action');
+    const btnActionText = document.getElementById('btn-action-text');
+    const tensionContainer = document.getElementById('tension-container');
+    const tensionBar = document.getElementById('tension-bar');
+    const tensionPercent = document.getElementById('tension-percent');
+    let waitTimer = null;
+    let decayInterval = null;
+
+    function setIdleState() {
+      state.status = 'idle';
+      state.reelProgress = 0;
+      statusMsg.innerText = '「キャスト」を押して釣りをはじめよう！🥺';
+      statusMsg.className = "bg-white/95 backdrop-blur-sm text-slate-800 px-5 py-2.5 rounded-full font-bold shadow-xl text-xs sm:text-sm transition-all border-2 border-sky-300 animate-bounce";
+      btnActionText.innerText = 'キャスト！';
+      btnAction.className = "w-48 h-16 bg-gradient-to-b from-amber-400 via-orange-500 to-amber-600 hover:brightness-110 active:scale-95 text-white font-black text-xl rounded-full shadow-2xl border-4 border-white flex items-center justify-center gap-2 transition-all";
+      tensionContainer.classList.add('hidden');
+    }
+
+    btnAction.addEventListener('click', () => {
+      initAudio();
+      if (state.status === 'idle') startCasting();
+      else if (state.status === 'reeling' || state.status === 'hit') pullReel();
+    });
+
+    function startCasting() {
+      state.status = 'casting';
+      playSound('cast');
+      statusMsg.innerText = 'ルアーを投げたよ！アタリを待とう... 🌊';
+      statusMsg.classList.remove('animate-bounce');
+      btnActionText.innerText = '待機中...';
+      btnAction.classList.add('opacity-50', 'pointer-events-none');
+
+      const waitTime = 1800 + Math.random() * 2500;
+      waitTimer = setTimeout(triggerHit, waitTime);
+    }
+
+    function triggerHit() {
+      state.status = 'hit';
+      playSound('hit');
+
+      const filteredList = FISH_DATABASE.filter(f => f.location === state.location);
+      state.currentFish = selectRandomFish(filteredList);
+
+      statusMsg.innerText = '💥 ヒット！！ 連打で引き揚げろ！ 💥';
+      statusMsg.className = "bg-rose-500 text-white px-5 py-2.5 rounded-full font-black shadow-xl text-xs sm:text-sm border-2 border-white animate-pulse";
+      btnActionText.innerText = 'TAP TAP!!';
+      btnAction.className = "w-48 h-16 bg-gradient-to-b from-rose-500 to-red-600 text-white font-black text-xl rounded-full shadow-2xl border-4 border-white flex items-center justify-center gap-2 animate-bounce cursor-pointer";
+      btnAction.classList.remove('opacity-50', 'pointer-events-none');
+
+      document.getElementById('target-fish-label').innerText = `${state.currentFish.name} がヒット！`;
+      tensionContainer.classList.remove('hidden');
+      state.reelProgress = 20;
+      updateTensionBar();
+
+      state.status = 'reeling';
+      startTensionDecay();
+    }
+
+    function selectRandomFish(list) {
+      const rand = Math.random() * 100;
+      let rarity = 1;
+      if (rand > 93) rarity = 5;      // 7% 神話
+      else if (rand > 82) rarity = 4; // 11% 伝説
+      else if (rand > 62) rarity = 3; // 20% レア
+      else if (rand > 35) rarity = 2; // 27% アンコモン
+      else rarity = 1;               // 35% コモン
+
+      const matched = list.filter(f => f.rarity === rarity);
+      if (matched.length > 0) return matched[Math.floor(Math.random() * matched.length)];
+      return list[Math.floor(Math.random() * list.length)];
+    }
+
+    function pullReel() {
+      if (state.status !== 'reeling') return;
+      playSound('reel');
+      const increment = Math.max(7, 24 - state.currentFish.rarity * 3);
+      state.reelProgress += increment;
+      addParticles(canvas.width * 0.72, canvas.height * 0.46, '#38bdf8', 4);
+
+      if (state.reelProgress >= 100) {
+        state.reelProgress = 100;
+        catchSuccess();
+      }
+      updateTensionBar();
+    }
+
+    function startTensionDecay() {
+      if (decayInterval) clearInterval(decayInterval);
+      decayInterval = setInterval(() => {
+        if (state.status !== 'reeling') { clearInterval(decayInterval); return; }
+        const decayRate = 1.8 + state.currentFish.rarity * 0.6;
+        state.reelProgress -= decayRate;
+
+        if (state.reelProgress <= 0) {
+          state.reelProgress = 0;
+          catchFailed();
+        }
+        updateTensionBar();
+      }, 100);
+    }
+
+    function updateTensionBar() {
+      const percent = Math.min(100, Math.max(0, Math.floor(state.reelProgress)));
+      tensionBar.style.width = percent + '%';
+      tensionPercent.innerText = percent + '%';
+    }
+
+    function catchSuccess() {
+      state.status = 'idle';
+      clearInterval(decayInterval);
+      playSound('success');
+
+      const fish = state.currentFish;
+      const size = (fish.minSize + Math.random() * (fish.maxSize - fish.minSize)).toFixed(1);
+      
+      let isNew = false;
+      if (!state.caughtData[fish.id]) {
+        state.caughtData[fish.id] = { count: 1, maxSize: parseFloat(size) };
+        isNew = true;
+      } else {
+        state.caughtData[fish.id].count += 1;
+        if (size > state.caughtData[fish.id].maxSize) {
+          state.caughtData[fish.id].maxSize = parseFloat(size);
+        }
+      }
+      saveData();
+      showCatchModal(fish, size, isNew);
+      setIdleState();
+    }
+
+    function catchFailed() {
+      state.status = 'idle';
+      clearInterval(decayInterval);
+      statusMsg.innerText = '逃げられてしまった... 🥺';
+      statusMsg.className = "bg-slate-800 text-white px-5 py-2.5 rounded-full font-bold shadow-xl text-xs sm:text-sm border-2 border-slate-600";
+      setTimeout(setIdleState, 1600);
+    }
+
+    // ==========================================
+    // 6. MODAL & ZUKAN MANAGEMENT
+    // ==========================================
+    const catchModal = document.getElementById('catch-modal');
+
+    function showCatchModal(fish, size, isNew) {
+      document.getElementById('modal-fish-icon').innerText = fish.icon;
+      document.getElementById('modal-fish-name').innerText = fish.name;
+      document.getElementById('modal-fish-rarity').innerText = '★'.repeat(fish.rarity) + '☆'.repeat(5 - fish.rarity);
+      document.getElementById('modal-fish-size').innerText = `サイズ: ${size} cm`;
+      document.getElementById('modal-fish-desc').innerText = fish.desc;
+
+      const newTag = document.getElementById('modal-new-tag');
+      if (isNew) newTag.classList.remove('hidden');
+      else newTag.classList.add('hidden');
+
+      catchModal.classList.remove('hidden');
+    }
+
+    document.getElementById('btn-close-modal').addEventListener('click', () => {
+      catchModal.classList.add('hidden');
+    });
+
+    function updateZukanGrid(filterLoc = 'all') {
+      const grid = document.getElementById('zukan-grid');
+      grid.innerHTML = '';
+
+      const filtered = filterLoc === 'all' 
+        ? FISH_DATABASE 
+        : FISH_DATABASE.filter(f => f.location === filterLoc);
+
+      filtered.forEach(fish => {
+        const data = state.caughtData[fish.id];
+        const isCaught = !!data;
+
+        const card = document.createElement('div');
+        card.className = `p-2.5 rounded-2xl flex flex-col items-center justify-between border-2 transition-all ${
+          isCaught 
+            ? 'bg-white border-sky-200 shadow-sm hover:shadow-md' 
+            : 'bg-slate-200/70 border-slate-300 opacity-50'
+        }`;
+
+        card.innerHTML = `
+          <div class="text-3xl my-1">${isCaught ? fish.icon : '❓'}</div>
+          <div class="text-[11px] font-black text-slate-800 text-center truncate w-full">
+            ${isCaught ? fish.name : '？？？'}
+          </div>
+          <div class="text-[9px] text-amber-500 font-bold">
+            ${'★'.repeat(fish.rarity)}
+          </div>
+          <div class="text-[9px] text-slate-400 font-semibold mt-0.5">
+            ${isCaught ? `${data.maxSize}cm` : '未発見'}
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+      updateZukanBadge();
+    }
+
+    function updateZukanBadge() {
+      const total = FISH_DATABASE.length; // 100
+      const caught = Object.keys(state.caughtData).length;
+      const percent = Math.floor((caught / total) * 100);
+
+      document.getElementById('zukan-progress-badge').innerText = `${caught}/${total} (${percent}%)`;
+      document.getElementById('zukan-count').innerText = `コンプリート率: ${percent}%`;
+    }
+
+    document.querySelectorAll('.zukan-filter').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.zukan-filter').forEach(b => {
+          b.className = "zukan-filter text-[11px] font-bold px-2.5 py-1 rounded-lg bg-white text-slate-600 border border-slate-200";
+        });
+        e.target.className = "zukan-filter active text-[11px] font-bold px-2.5 py-1 rounded-lg bg-sky-500 text-white shadow-sm";
+        updateZukanGrid(e.target.dataset.filter);
+      });
+    });
+
+    // ==========================================
+    // 7. NAVIGATION & LOCATION/TIME SELECT
+    // ==========================================
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetTab = btn.dataset.tab;
+        document.querySelectorAll('.nav-btn').forEach(b => {
+          b.classList.remove('active', 'text-sky-500');
+          b.classList.add('text-slate-400');
+        });
+        btn.classList.add('active', 'text-sky-500');
+        btn.classList.remove('text-slate-400');
+
+        document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        document.getElementById(targetTab).classList.add('active');
+
+        if (targetTab === 'tab-zukan') updateZukanGrid();
+      });
+    });
+
+    document.querySelectorAll('.location-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const loc = card.dataset.loc;
+        state.location = loc;
+        if (waitTimer) clearTimeout(waitTimer);
+        setIdleState();
+
+        const badge = document.getElementById('current-location-badge');
+        if (loc === '川') { badge.className = 'bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full border border-emerald-300'; badge.innerText = '🌱 川'; }
+        else if (loc === '海') { badge.className = 'bg-sky-100 text-sky-800 px-2.5 py-1 rounded-full border border-sky-300'; badge.innerText = '🌊 海'; }
+        else if (loc === '深海') { badge.className = 'bg-purple-100 text-purple-800 px-2.5 py-1 rounded-full border border-purple-300'; badge.innerText = '🌌 深海'; }
+        else if (loc === '幻') { badge.className = 'bg-pink-100 text-pink-800 px-2.5 py-1 rounded-full border border-pink-300'; badge.innerText = '✨ 秘境'; }
+
+        document.querySelector('[data-tab="tab-game"]').click();
+      });
+    });
+
+    document.querySelectorAll('.time-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.time-btn').forEach(b => {
+          b.className = "time-btn flex-1 py-1.5 text-xs font-bold rounded-xl bg-slate-100 text-slate-600 border border-slate-200";
+        });
+        e.target.className = "time-btn flex-1 py-1.5 text-xs font-bold rounded-xl bg-amber-400 text-white shadow-sm border-2 border-amber-300";
+        state.timeOfDay = e.target.dataset.time;
+      });
+    });
+
+    // ==========================================
+    // 8. INIT
+    // ==========================================
+    window.onload = () => {
+      loadSaveData();
+      setIdleState();
+      updateZukanBadge();
+      renderCanvas();
+    };
+  </script>
+</body>
+</html>
